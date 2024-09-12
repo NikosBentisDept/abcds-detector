@@ -24,7 +24,7 @@ Annotations used:
 """
 
 ### REMOVE FOR COLAB - START
-from input_parameters import (
+from ..input_parameters import (
     GEMINI_PRO,
     llm_location,
     llm_generation_config,
@@ -33,11 +33,11 @@ from input_parameters import (
     use_annotations,
 )
 
-from helpers.annotations_helpers import detected_text_in_first_5_seconds
+from..helpers.annotations_helpers import detected_text_in_first_5_seconds
 
-from helpers.vertex_ai_service import LLMParameters, detect_feature_with_llm
+from..helpers.vertex_ai_service import LLMParameters, detect_feature_with_llm
 
-from helpers.generic_helpers import (
+from..helpers.generic_helpers import (
     get_n_secs_video_uri_from_uri,
 )
 

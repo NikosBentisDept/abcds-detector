@@ -28,13 +28,13 @@ from vertexai.preview.generative_models import GenerativeModel, Part
 from googleapiclient.errors import HttpError
 
 ### REMOVE FOR COLAB - START
-from input_parameters import (
+from ..input_parameters import (
     PROJECT_ID,
     GEMINI_PRO,
     VERBOSE,
 )
 
-from helpers.generic_helpers import get_video_format
+from ..helpers.generic_helpers import get_video_format
 
 ### REMOVE FOR COLAB - END
 

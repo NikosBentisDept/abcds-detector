@@ -28,7 +28,7 @@ from moviepy.editor import VideoFileClip
 
 
 ### REMOVE FOR COLAB - START
-from input_parameters import (
+from ..input_parameters import (
     VERBOSE,
     KNOWLEDGE_GRAPH_API_KEY,
     BUCKET_NAME,

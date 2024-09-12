@@ -24,14 +24,14 @@ import json
 
 
 ### REMOVE FOR COLAB - START
-from input_parameters import (
+from ..input_parameters import (
     VERBOSE,
     BUCKET_NAME,
     early_time_seconds,
     confidence_threshold,
 )
 
-from helpers.generic_helpers import get_bucket
+from ..helpers.generic_helpers import get_bucket
 
 ### REMOVE FOR COLAB - END
 

@@ -25,7 +25,7 @@ Annotations used:
 """
 
 ### REMOVE FOR COLAB - START
-from input_parameters import (
+from ..input_parameters import (
     GEMINI_PRO,
     llm_location,
     llm_generation_config,
@@ -34,12 +34,12 @@ from input_parameters import (
     context_and_examples,
 )
 
-from helpers.annotations_helpers import (
+from..helpers.annotations_helpers import (
     find_elements_in_transcript,
     get_speech_transcript,
 )
 
-from helpers.vertex_ai_service import (
+from..helpers.vertex_ai_service import (
     LLMParameters,
     detect_feature_with_llm,
 )
