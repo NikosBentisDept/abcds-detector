@@ -40,3 +40,6 @@ Thumbs.db
 
 # Git
 .git
+
+generate_tree.py
+directory_structure.txt

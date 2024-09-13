@@ -23,14 +23,14 @@
 from google.cloud import videointelligence
 
 ### REMOVE FOR COLAB - START
-from..helpers.generic_helpers import (
+from ..helpers.generic_helpers import (
     get_bucket,
     get_file_name_from_gcs_url,
 )
 
-from..helpers.annotations_helpers import get_existing_annotations_from_gcs
+from helpers.annotations_helpers import get_existing_annotations_from_gcs
 
-from..input_parameters import BUCKET_NAME
+from input_parameters import BUCKET_NAME
 from .label_detection import detect_labels
 from .face_detection import detect_faces
 from .people_detection import detect_people

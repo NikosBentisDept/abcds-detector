@@ -22,8 +22,8 @@
 
 # @markdown ### Google Cloud Project Details
 
-PROJECT_ID = "" # @param {type:"string"}
-BUCKET_NAME = "" # @param {type:"string"}
+PROJECT_ID = "dmnl-daas-development" # @param {type:"string"}
+BUCKET_NAME = "abcd-detector-experiments" # @param {type:"string"}
 
 
 # @markdown ### Solution Setup
@@ -43,8 +43,8 @@ KNOWLEDGE_GRAPH_API_KEY = ""  # @param {type:"string"}
 
 # @markdown ### Brand and Product Details
 
-brand_name = "Google"  # @param {type:"string"}
-brand_variations_str = "google"  # @param {type:"string"}
+brand_name = "ING"  # @param {type:"string"}
+brand_variations_str = "ING"  # @param {type:"string"}
 branded_products_str = "Google pixel, Google pixel buds, Google pixel watch"  # @param {type:"string"}
 branded_products_categories_str = "phone, watch, buds"  # @param {type:"string"}
 branded_call_to_actions_str = "buy it!"  # @param {type:"string"}
@@ -67,7 +67,7 @@ dynamic_cutoff_ms = 3000  # @param {type:"number"}
 
 GEMINI_PRO_VISION = "gemini-1.0-pro-vision-001"  # @param {type:"string"}
 GEMINI_PRO = "gemini-1.5-pro-preview-0409"  # @param {type:"string"}
-llm_location = "us-central1"  # @param {type:"string"}
+llm_location = "europe-west4"  # @param {type:"string"}
 max_output_tokens = 8192  # @param {type:"number"}
 temperature = 1  # @param {type:"number"}
 top_p = 0.95  # @param {type:"number"}
