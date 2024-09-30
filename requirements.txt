@@ -3,3 +3,5 @@ google-cloud-videointelligence
 google-cloud-storage
 moviepy
 google-api-python-client
+fastapi==0.115.0
+gradio==4.44.0

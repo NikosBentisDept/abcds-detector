@@ -25,6 +25,8 @@ import os
 import urllib
 from google.cloud import storage
 from moviepy.editor import VideoFileClip
+from datetime import timedelta
+import csv
 
 
 ### REMOVE FOR COLAB - START
@@ -93,6 +95,7 @@ def get_file_name_from_gcs_url(gcs_url: str) -> tuple[str]:
         file_name: the file name
     """
     url_parts = gcs_url.split("/")
+    # :TODO: IF we include date in url bucket/brand/date/video then url_parts ==4 & url_parts[3].split(".")[0]
     if len(url_parts) == 3:
         file_name = url_parts[2].split(".")[0]
         file_name_with_format = url_parts[2]
@@ -121,6 +124,7 @@ def get_n_secs_video_uri_from_uri(video_uri: str, new_name_part: str):
     Return:
         video_name_n_secs
     """
+    # :TODO: Also change this to work as expected
     gcs_parts = video_uri.split(".")
     if len(gcs_parts) == 2:
         video_format = gcs_parts[1]
@@ -253,3 +257,202 @@ def trim_and_push_video_to_gcs(
     )
     if VERBOSE:
         print(f"File {new_video_name} uploaded to {gcs_output_path}.\n")
+
+def upload_file_to_bucket(file_path, brand_name, destination_folder="videos"):
+    """Uploads files to the specified GCS bucket under the brand's folder.
+    Args:
+        file_path: path to the file to upload
+        brand_name: the brand name to organize the uploaded files
+        destination_folder: the folder under the brand's directory to store the file
+    """
+    bucket = get_bucket()  # Get the GCS bucket
+
+    # Create folder path for the brand
+    brand_folder = f"{brand_name}/{destination_folder}/"
+
+    # Get the filename from the file path
+    file_name = os.path.basename(file_path)
+    blob = bucket.blob(f"{brand_folder}{file_name}")
+
+    try:
+        # Upload the file to GCS
+        blob.upload_from_filename(file_path)
+        print(f"File {file_name} uploaded to {brand_folder}.\n")
+    except Exception as e:
+        print(f"Error uploading {file_name}: {e}")
+
+
+def get_public_url(file_name, brand_name, folder="assessments"):
+    """Generates a public URL for a file in GCS.
+    Args:
+        file_name: name of the file
+        brand_name: the brand name
+        folder: the folder where the file is stored
+    Returns:
+        public_url: the public URL of the file
+    """
+    bucket = get_bucket()
+    blob = bucket.blob(f"{brand_name}/{folder}/{file_name}")
+
+    # Make the blob publicly accessible
+    blob.make_public()
+
+    return blob.public_url
+
+def format_assessment_results(abcd_assessment: dict) -> str:
+    """Format the assessment results into a Markdown string."""
+    output = f"## ABCD Assessment for brand **{abcd_assessment.get('brand_name')}**\n"
+    for video_assessment in abcd_assessment.get("video_assessments"):
+        video_name = video_assessment.get("video_name")
+        score = round(video_assessment.get("score"), 2)
+        passed_features = video_assessment.get("passed_features_count")
+        total_features = len(video_assessment.get("features"))
+
+        output += f"\n### Asset Name: {video_name}\n"
+        output += f"**Video Score**: {score}%, adherence ({passed_features}/{total_features})\n\n"
+
+        if score >= 80:
+            result = "✅ Excellent"
+        elif 65 <= score < 80:
+            result = "⚠ Might Improve"
+        else:
+            result = "❌ Needs Review"
+        output += f"**Asset Result**: {result}\n\n"
+
+        output += "**Evaluated Features:**\n"
+        for feature in video_assessment.get("features"):
+            feature_name = feature.get("feature")
+            if feature.get("feature_detected"):
+                output += f"- ✅ {feature_name}\n"
+            else:
+                output += f"- ❌ {feature_name}\n"
+    return output
+
+def print_abcd_assetssments(abcd_assessment: dict, brand_name) -> None:
+    """Print ABCD Assessments
+    Args:
+        abcd_assessments: list of video abcd assessments
+    """
+    print(
+        f"\n\n*****  ABCD Assessment for brand {abcd_assessment.get('brand_name')}  *****"
+    )
+    for video_assessment in abcd_assessment.get("video_assessments"):
+        video_url = f"/content/{BUCKET_NAME}/{brand_name}/videos/{video_assessment.get('video_name')}"
+        # Play Video
+        player(video_url)
+        print(f"\nAsset name: {video_assessment.get('video_name')}\n")
+        passed_features_count = video_assessment.get("passed_features_count")
+        total_features = len(video_assessment.get("features"))
+        print(
+            f"Video score: {round(video_assessment.get('score'), 2)}%, adherence ({passed_features_count}/{total_features})\n"
+        )
+        if video_assessment.get("score") >= 80:
+            print("Asset result: ✅ Excellent \n")
+        elif video_assessment.get("score") >= 65 and video_assessment.get("score") < 80:
+            print("Asset result: ⚠ Might Improve \n")
+        else:
+            print("Asset result: ❌ Needs Review \n")
+
+        print("Evaluated Features:")
+        for feature in video_assessment.get("features"):
+            if feature.get("feature_detected"):
+                print(f' * ✅ {feature.get("feature")}')
+            else:
+                print(f' * ❌ {feature.get("feature")}')
+
+def player(video_url: str):
+    """Placeholder function to test locally"""
+    print(video_url)
+
+def generate_csv_assessment_results(abcd_assessment: dict, output_csv_file: str):
+    """Generate a CSV file from the assessment results."""
+    # Prepare the header
+    header = ['Video Name', 'Video URI', 'Overall Score', 'Passed Features', 'Total Features']
+    features_set = set()
+
+    # First pass to collect all feature names
+    for video_assessment in abcd_assessment.get("video_assessments"):
+        for feature in video_assessment.get("features"):
+            features_set.add(feature.get("feature"))
+    # Ensure consistent order
+    features_list = sorted(features_set)
+    # Add feature detection and score columns
+    header.extend([f"{feature} - Detected" for feature in features_list])
+    header.extend([f"{feature} - Score" for feature in features_list])
+    header.extend([f"{feature} - Explanation" for feature in features_list])
+
+    # Write to CSV
+    with open(output_csv_file, mode='w', newline='', encoding='utf-8') as csv_file:
+        writer = csv.writer(csv_file)
+        writer.writerow(header)
+
+        for video_assessment in abcd_assessment.get("video_assessments"):
+            row = [
+                video_assessment.get("video_name"),
+                video_assessment.get("video_uri"),
+                round(video_assessment.get("score"), 2),
+                video_assessment.get("passed_features_count"),
+                len(video_assessment.get("features"))
+            ]
+            # Create dictionaries for quick access
+            feature_detection = {}
+            feature_explanation = {}
+            for feature in video_assessment.get("features"):
+                feature_name = feature.get("feature")
+                feature_detection[feature_name] = feature.get("feature_detected")
+                # Handle 'llm_details' being a list or dict
+                llm_details = feature.get("llm_details")
+                if llm_details:
+                    if isinstance(llm_details, list):
+                        if len(llm_details) > 0:
+                            llm_explanation = llm_details[0].get("llm_explanation", "")
+                        else:
+                            llm_explanation = ""
+                    elif isinstance(llm_details, dict):
+                        llm_explanation = llm_details.get("llm_explanation", "")
+                    else:
+                        llm_explanation = ""
+                else:
+                    llm_explanation = ""
+                feature_explanation[feature_name] = llm_explanation
+            # Add detection status
+            for feature_name in features_list:
+                detected = feature_detection.get(feature_name, False)
+                row.append("Yes" if detected else "No")
+            # Add feature scores
+            for feature_name in features_list:
+                detected = feature_detection.get(feature_name, False)
+                score = 1 if detected else 0
+                row.append(score)
+            # Add explanations
+            for feature_name in features_list:
+                explanation = feature_explanation.get(feature_name, "")
+                # Clean up newlines and quotes in explanations
+                explanation = explanation.replace('\n', ' ').replace('"', '""')
+                row.append(explanation)
+            writer.writerow(row)
+
+
+def get_signed_url(file_name, brand_name, folder="assessments", expiration_minutes=60):
+    """Generates a signed URL for a file in GCS.
+
+    Args:
+        file_name (str): Name of the file.
+        brand_name (str): The brand name.
+        folder (str): The folder where the file is stored.
+        expiration_minutes (int): How long the URL is valid for.
+
+    Returns:
+        str: The signed URL of the file.
+    """
+    bucket = get_bucket()
+    blob = bucket.blob(f"{brand_name}/{folder}/{file_name}")
+
+    # Generate signed URL
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=timedelta(minutes=expiration_minutes),
+        method="GET",
+    )
+
+    return url

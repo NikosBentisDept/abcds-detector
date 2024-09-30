@@ -26,13 +26,13 @@ from input_parameters import (
     BUCKET_NAME,
     VIDEO_SIZE_LIMIT_MB,
     STORE_ASSESSMENT_RESULTS_LOCALLY,
-    brand_name,
-    brand_variations,
-    branded_products,
-    branded_products_categories,
-    branded_call_to_actions,
-    use_llms,
-    use_annotations,
+    #brand_name, :TODO: replaced with FastAPI inputs, delete them at the end
+    #brand_variations,
+    #branded_products,
+    #branded_products_categories,
+    #branded_call_to_actions,
+    #use_llms,
+    #use_annotations,
 )
 
 from generate_video_annotations.generate_video_annotations import (
@@ -46,6 +46,12 @@ from helpers.generic_helpers import (
     get_file_name_from_gcs_url,
     store_assessment_results_locally,
     trim_videos,
+    upload_file_to_bucket,
+    get_public_url,
+    format_assessment_results,
+    print_abcd_assetssments,
+    generate_csv_assessment_results,
+    get_signed_url
 )
 
 from helpers.annotations_helpers import download_video_annotations
@@ -67,49 +73,27 @@ from features.d_call_to_action import (
     detect_call_to_action_text,
 )
 
+# New imports
+from fastapi import FastAPI, File, UploadFile, Form
+from typing import List, Optional
+import gradio as gr
+import requests
+import uvicorn
+import os
+import time
+import json
 
-def player(video_url: str):
-    """Placeholder function to test locally"""
-    print(video_url)
+os.environ["ENVIRONMENT"] = "development"
+app = FastAPI()
 
-
-### REMOVE FOR COLAB - END
-
-
-def print_abcd_assetssments(abcd_assessment: dict) -> None:
-    """Print ABCD Assessments
-    Args:
-        abcd_assessments: list of video abcd assessments
-    """
-    print(
-        f"\n\n*****  ABCD Assessment for brand {abcd_assessment.get('brand_name')}  *****"
-    )
-    for video_assessment in abcd_assessment.get("video_assessments"):
-        video_url = f"/content/{BUCKET_NAME}/{brand_name}/videos/{video_assessment.get('video_name')}"
-        # Play Video
-        player(video_url)
-        print(f"\nAsset name: {video_assessment.get('video_name')}\n")
-        passed_features_count = video_assessment.get("passed_features_count")
-        total_features = len(video_assessment.get("features"))
-        print(
-            f"Video score: {round(video_assessment.get('score'), 2)}%, adherence ({passed_features_count}/{total_features})\n"
-        )
-        if video_assessment.get("score") >= 80:
-            print("Asset result: ✅ Excellent \n")
-        elif video_assessment.get("score") >= 65 and video_assessment.get("score") < 80:
-            print("Asset result: ⚠ Might Improve \n")
-        else:
-            print("Asset result: ❌ Needs Review \n")
-
-        print("Evaluated Features:")
-        for feature in video_assessment.get("features"):
-            if feature.get("feature_detected"):
-                print(f' * ✅ {feature.get("feature")}')
-            else:
-                print(f' * ❌ {feature.get("feature")}')
-
-
-def execute_abcd_assessment_for_videos():
+def execute_abcd_assessment_for_videos(brand_name,
+        brand_variations,
+        branded_products,
+        branded_products_categories,
+        branded_call_to_actions,
+        use_annotations,
+        use_llms):
+    # add inputs (brand, product, use)
     """Execute ABCD Assessment for all brand videos in GCS"""
 
     assessments = {"brand_name": brand_name, "video_assessments": []}
@@ -160,6 +144,7 @@ def execute_abcd_assessment_for_videos():
 
         # 3) Execute ABCD Assessment
         video_uri = f"gs://{BUCKET_NAME}/{video.name}"
+        # :TODO:
         features = []
 
         # Quick pacing
@@ -302,7 +287,15 @@ def execute_abcd_assessment_for_videos():
     return assessments
 
 
-def execute_abcd_detector():
+def execute_abcd_detector(
+        brand_name,
+        brand_variations,
+        branded_products,
+        branded_products_categories,
+        branded_call_to_actions,
+        use_annotations,
+        use_llms
+    ):
     """Main ABCD Assessment execution"""
 
     if use_annotations:
@@ -310,15 +303,165 @@ def execute_abcd_detector():
 
     trim_videos(brand_name)
 
-    abcd_assessments = execute_abcd_assessment_for_videos()
+    abcd_assessments = execute_abcd_assessment_for_videos(brand_name,
+        brand_variations,
+        branded_products,
+        branded_products_categories,
+        branded_call_to_actions,
+        use_annotations,
+        use_llms)
+
     if len(abcd_assessments.get("video_assessments")) == 0:
         print("There are no videos to display.")
         exit()
 
     # Print ABCD Assessments
-    print_abcd_assetssments(abcd_assessments)
+    print_abcd_assetssments(abcd_assessments, brand_name)
+
+    return abcd_assessments
+
+@app.post("/abcd_detector")
+def abcd_detector(
+        brand_name,
+        brand_variations_str,
+        branded_products_str,
+        branded_products_categories_str,
+        branded_call_to_actions_str,
+        use_annotations,
+        use_llms,
+        files,
+):
+    # Upload video files to bucket storage
+    for file in files:
+        if hasattr(file, "file"):  # FastAPI UploadFile
+            content = file.file.read()
+            file_location = f"./temp/{file.filename}"
+            with open(file_location, "wb") as temp_file:
+                temp_file.write(content)
+            upload_file_to_bucket(file_location, brand_name)
+        elif isinstance(file, str):  # Gradio provides file paths as strings
+            upload_file_to_bucket(file, brand_name)
+        else:
+            raise TypeError(f"Unsupported file type: {type(file)}")
+
+    # Convert comma-separated strings to lists
+    brand_variations = [s.strip() for s in brand_variations_str.split(',')]
+    branded_products = [s.strip() for s in branded_products_str.split(',')]
+    branded_products_categories = [s.strip() for s in branded_products_categories_str.split(',')]
+    branded_call_to_actions = [s.strip() for s in branded_call_to_actions_str.split(',')]
+
+    # Call the function to perform the assessment
+    assessments = execute_abcd_detector(
+        brand_name, brand_variations, branded_products,
+        branded_products_categories, branded_call_to_actions,
+        use_annotations, use_llms
+    )
+
+    # Format the results for display
+    formatted_output = format_assessment_results(assessments)
+
+    # Save assessments to a JSON file
+    timestamp = int(time.time())
+    json_output_filename = f"assessments_{brand_name}_{timestamp}.json"
+    json_output_file = f"./assessments/{json_output_filename}"
+    os.makedirs(os.path.dirname(json_output_file), exist_ok=True)
+    with open(json_output_file, "w") as f:
+        json.dump(assessments, f, indent=4)
+
+    # Generate the CSV file
+    csv_output_filename = f"abcd_analysis_{brand_name}_{timestamp}.csv"
+    csv_output_file = f"./assessments/{csv_output_filename}"
+    os.makedirs(os.path.dirname(csv_output_file), exist_ok=True)
+    generate_csv_assessment_results(assessments, csv_output_file)
+
+    # Optionally, you can still upload files to GCS if needed
+    upload_file_to_bucket(json_output_file, brand_name, destination_folder="assessments")
+    upload_file_to_bucket(csv_output_file, brand_name, destination_folder="assessments")
+
+    # Return the formatted output and file paths
+    return formatted_output, json_output_file, csv_output_file
 
 
-### Main ABCD Assessment execution ###
+with gr.Blocks() as demo:
+    # Header with "Google" in official colors
+    gr.Markdown("""
+    <h1 style='text-align: center; font-family: "Roboto", sans-serif;'>
+        ABCD Detector by
+        <span style='color: #4285F4;'>G</span>
+        <span style='color: #DB4437;'>o</span>
+        <span style='color: #F4B400;'>o</span>
+        <span style='color: #4285F4;'>g</span>
+        <span style='color: #0F9D58;'>l</span>
+        <span style='color: #DB4437;'>e</span>
+        x DEPT
+    </h1>
+    """)
+    gr.Markdown("<h3 style='text-align: center; color: #1a73e8;'>Automated Video Asset ABCD Analysis</h3>")
+
+    with gr.Row():
+        # Left column for inputs
+        with gr.Column(scale=1):
+            gr.Markdown("### **Upload Video Files**")
+            files = gr.File(
+                label="Upload Video Files",
+                file_count="multiple",
+                type="filepath"
+            )
+
+            gr.Markdown("### **Brand Information**")
+            brand_name = gr.Textbox(
+                label="Brand Name",
+                placeholder="Enter the brand name (e.g., 'Google')"
+            )
+            brand_variations_str = gr.Textbox(
+                label="Brand Variations",
+                placeholder="e.g., 'Google LLC, Alphabet Inc.'"
+            )
+            branded_products_str = gr.Textbox(
+                label="Branded Products",
+                placeholder="e.g., 'Pixel Phone, Google Home'"
+            )
+            branded_products_categories_str = gr.Textbox(
+                label="Branded Product Categories",
+                placeholder="e.g., 'Smartphones, Smart Speakers'"
+            )
+            branded_call_to_actions_str = gr.Textbox(
+                label="Branded Call To Actions",
+                placeholder="e.g., 'Buy now, Learn more'"
+            )
+
+            gr.Markdown("### **Settings**")
+            use_annotations = gr.Checkbox(
+                label="Use Pre-generated Annotations",
+                value=False
+            )
+            use_llms = gr.Checkbox(
+                label="Use LLMs for Analysis",
+                value=True
+            )
+
+            btn_cluster = gr.Button("Run ABCD Detection", variant="primary")
+
+        # Right column for outputs
+        with gr.Column(scale=1):
+            gr.Markdown("### **Analysis Results**")
+            assessments = gr.Markdown()
+            json_file_output = gr.File(label="Download Assessment Report (JSON)")
+            csv_file_output = gr.File(label="Download CSV Assessment Report")
+
+    btn_cluster.click(
+        fn=abcd_detector,
+        inputs=[
+            brand_name, brand_variations_str, branded_products_str,
+            branded_products_categories_str, branded_call_to_actions_str,
+            use_annotations, use_llms, files
+        ],
+        outputs=[assessments, json_file_output, csv_file_output]
+    )
+
+# Mount gradio to FastAPI
+app = gr.mount_gradio_app(app, demo, path="/abcd")
+
+# Uncomment for development
 if __name__ == "__main__":
-    execute_abcd_detector()
+      uvicorn.run(app, host="0.0.0.0", port=8086)
